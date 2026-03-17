@@ -3,6 +3,8 @@ import passport from 'passport';
 import { createTenantStrategy } from './auth/saml';
 import { issueInternalToken } from './auth/jwt';
 import { scimRouter } from './routes/scim';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerDocument } from './swagger';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -11,7 +13,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Needed for SAML POST bindings
 app.use(passport.initialize());
 
-// --- SCIM Directory Provisioning Layer ---
+// Mount Swagger OpenAPI Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// --- 1) SCIM PROVISIONING ENDPOINTS ---
 app.use('/scim/v2', scimRouter);
 
 // --- SAML Single Sign-On Layer ---
