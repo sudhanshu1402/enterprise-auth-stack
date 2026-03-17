@@ -4,7 +4,7 @@
   "description": "> Unified authentication, RBAC, and directory provisioning layer supporting OAuth 2.0, SAML SSO, and SCIM.",
   "main": "index.js",
   "scripts": {
-    "start": "ts-node src/index.ts",
+    "start": "node dist/index.js",
     "dev": "nodemon -w src --ext ts --exec ts-node src/index.ts",
     "build": "tsc"
   },
