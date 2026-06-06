@@ -1,5 +1,7 @@
 # Enterprise Auth Stack
 
+[![CI](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A B2B SSO gateway that synthesizes SAML 2.0 Identity Provider assertions into unified JWTs, with SCIM 2.0 automated user provisioning and multi-tenant isolation backed by AWS Secrets Manager.
 
 ## Problem
