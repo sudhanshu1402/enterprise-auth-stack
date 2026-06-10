@@ -23,9 +23,10 @@ export const issueInternalToken = (user: Express.User): string => {
     role: user.customRole || 'member'
   };
 
-  return jwt.sign(payload, JWT_SECRET, {
-    expiresIn: '1h',
-    issuer: process.env.ISSUER_URI,
-    audience: 'internal-api-gateway'
-  });
+  // Only set `issuer` when configured — jsonwebtoken rejects an undefined
+  // issuer, which would otherwise crash token issuance when ISSUER_URI is unset.
+  const signOptions: jwt.SignOptions = { expiresIn: '1h', audience: 'internal-api-gateway' };
+  if (process.env.ISSUER_URI) signOptions.issuer = process.env.ISSUER_URI;
+
+  return jwt.sign(payload, JWT_SECRET, signOptions);
 };
