@@ -1,7 +1,7 @@
 {
   "name": "enterprise-auth-stack",
   "version": "1.0.0",
-  "description": "> Unified authentication, RBAC, and directory provisioning layer supporting OAuth 2.0, SAML SSO, and SCIM.",
+  "description": "Multi-tenant B2B SSO gateway demo: per-tenant SAML 2.0 assertions resolved from AWS Secrets Manager, JIT group-to-role mapping, uniform internal JWTs, and an in-memory SCIM 2.0 provisioning router.",
   "main": "index.js",
   "scripts": {
     "start": "node dist/index.js",

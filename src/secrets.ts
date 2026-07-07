@@ -31,8 +31,15 @@ export async function getTenantConfig(tenantId: string): Promise<TenantSamlConfi
     
     throw new Error('Secret binary not supported directly without buffer conversion.');
   } catch (error) {
-    console.warn(`[Secrets] Failed to fetch config for tenant ${tenantId}. Mocking for dev.`);
-    // Fallback Mock for local demonstration
+    // In production a missing or unreadable secret is a hard failure — never
+    // silently serve a mock IdP config, which would let anyone authenticate
+    // against a fake identity provider.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`Unable to load SAML config for tenant ${tenantId}`);
+    }
+
+    console.warn(`[Secrets] Failed to fetch config for tenant ${tenantId}. Using dev mock.`);
+    // Fallback mock for local demonstration only.
     return {
       entryPoint: 'https://dev-mock-idp.example.com/app/saml/sso/saml',
       issuer: 'https://dev-mock-idp.example.com',

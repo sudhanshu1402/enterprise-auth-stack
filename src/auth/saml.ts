@@ -22,6 +22,17 @@ passport.deserializeUser((user: Express.User, done) => {
 });
 
 /**
+ * Just-In-Time group mapping: translate an IdP's `groups` assertion attribute
+ * into an internal role. Exported so the mapping rule can be unit-tested
+ * independently of the SAML strategy construction.
+ */
+export function mapGroupsToRole(profile: Profile): string {
+  return Array.isArray(profile.groups) && profile.groups.includes('Admin')
+    ? 'admin'
+    : 'member';
+}
+
+/**
  * Factory for creating tenant-specific SAML strategies dynamically.
  * Enterprise B2B requires isolated IdP configurations per client.
  */
@@ -44,9 +55,7 @@ export const createTenantStrategy = async (tenantId: string) => {
       
       // Perform Just-In-Time (JIT) Group Mapping here.
       // E.g. map Okta's 'groups' attribute to internal roles.
-      const mappedRole = Array.isArray(profile.groups) && profile.groups.includes('Admin') 
-        ? 'admin' 
-        : 'member';
+      const mappedRole = mapGroupsToRole(profile);
 
       const user: Express.User = {
         ...profile,

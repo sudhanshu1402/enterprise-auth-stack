@@ -2,7 +2,9 @@
 
 [![CI](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A B2B SSO gateway that synthesizes SAML 2.0 Identity Provider assertions into unified JWTs, with SCIM 2.0 automated user provisioning and multi-tenant isolation backed by AWS Secrets Manager.
+A B2B SSO gateway that synthesizes SAML 2.0 Identity Provider assertions into unified JWTs, with SCIM 2.0 user provisioning and multi-tenant isolation backed by AWS Secrets Manager.
+
+> **Scope:** a single-process reference implementation of the enterprise-SSO *wiring* — per-request SAML strategy construction, JIT group→role mapping, tenant config resolved from Secrets Manager (with a dev-only mock fallback that is disabled under `NODE_ENV=production`), and a SCIM router over an in-memory user store. It is a focused demo of the pattern, not a hosted product: swap the in-memory store for a database and point Secrets Manager at real tenant secrets to run it for real.
 
 ## Problem
 
@@ -49,7 +51,7 @@ graph TB
 
 - **Multi-tenant SAML SSO** -- dynamic per-tenant IdP configuration resolved at runtime from Secrets Manager
 - **JIT group-to-role mapping** -- IdP group assertions automatically mapped to internal RBAC roles
-- **SCIM 2.0 provisioning** -- automated user create/delete from IdP admin consoles (Okta, Azure AD)
+- **SCIM 2.0 provisioning** -- bearer-secured create / read / list / PATCH (activate-deactivate) / delete against an in-memory user store, with unique-`userName` conflict (`scimType: uniqueness`, 409) handling. The bearer check fails closed in production (no built-in default token).
 - **Token normalization** -- SAML assertions converted to uniform JWTs with `sub`, `email`, `tenantId`, `role` claims
 - **Swagger documentation** -- OpenAPI 3.0 spec at `/api-docs`
 - **Security defaults** -- non-root Docker user, audience validation, bearer token auth on SCIM endpoints
