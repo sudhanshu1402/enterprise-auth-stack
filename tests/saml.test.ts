@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Strategy as SamlStrategy } from 'passport-saml';
 
 // Stub the Secrets Manager lookup so createTenantStrategy builds from a
@@ -11,7 +11,41 @@ vi.mock('../src/secrets', () => ({
   })),
 }));
 
-import { createTenantStrategy, mapGroupsToRole } from '../src/auth/saml';
+import {
+  createTenantStrategy,
+  mapGroupsToRole,
+  samlCallbackUrl,
+  publicBaseUrl,
+} from '../src/auth/saml';
+
+describe('samlCallbackUrl (env-driven ACS URL)', () => {
+  const original = process.env.PUBLIC_BASE_URL;
+  afterEach(() => {
+    if (original === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = original;
+  });
+
+  it('falls back to localhost for local development', () => {
+    delete process.env.PUBLIC_BASE_URL;
+    expect(publicBaseUrl()).toBe('http://localhost:3000');
+    expect(samlCallbackUrl('acme')).toBe(
+      'http://localhost:3000/api/auth/saml/acme/callback'
+    );
+  });
+
+  it('uses PUBLIC_BASE_URL when set, so real deploys post to the public origin', () => {
+    process.env.PUBLIC_BASE_URL = 'https://sso.enterpriseweb.com';
+    expect(samlCallbackUrl('acme')).toBe(
+      'https://sso.enterpriseweb.com/api/auth/saml/acme/callback'
+    );
+  });
+
+  it('does not double up the slash when the base URL has a trailing slash', () => {
+    expect(samlCallbackUrl('acme', 'https://sso.example.com/')).toBe(
+      'https://sso.example.com/api/auth/saml/acme/callback'
+    );
+  });
+});
 
 describe('mapGroupsToRole', () => {
   it('maps an Admin group assertion to the admin role', () => {

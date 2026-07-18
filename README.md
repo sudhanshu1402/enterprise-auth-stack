@@ -107,6 +107,7 @@ docker run -e AWS_REGION=us-east-1 -e JWT_SECRET=... auth-stack
 
 ## Future Improvements
 
+- [ ] Migrate `passport-saml` → `@node-saml/passport-saml` (the original package is deprecated and no longer maintained)
 - [ ] OIDC provider support alongside SAML for modern IdPs
 - [ ] Redis cache for Secrets Manager with rotation-triggered invalidation
 - [ ] JWT signing with RS256 asymmetric keys (public key distribution to services)

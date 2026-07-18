@@ -33,6 +33,21 @@ export function mapGroupsToRole(profile: Profile): string {
 }
 
 /**
+ * Public origin the IdP posts assertions back to. In production this must be the
+ * externally reachable URL (behind the load balancer/proxy), so it is env-driven
+ * and only falls back to localhost for local development.
+ */
+export const publicBaseUrl = (): string =>
+  process.env.PUBLIC_BASE_URL || 'http://localhost:3000';
+
+/** The Assertion Consumer Service (callback) URL for a given tenant. */
+export const samlCallbackUrl = (
+  tenantId: string,
+  baseUrl: string = publicBaseUrl()
+): string =>
+  `${baseUrl.replace(/\/+$/, '')}/api/auth/saml/${tenantId}/callback`;
+
+/**
  * Factory for creating tenant-specific SAML strategies dynamically.
  * Enterprise B2B requires isolated IdP configurations per client.
  */
@@ -41,7 +56,7 @@ export const createTenantStrategy = async (tenantId: string) => {
 
   return new SamlStrategy(
     {
-      callbackUrl: `http://localhost:3000/api/auth/saml/${tenantId}/callback`,
+      callbackUrl: samlCallbackUrl(tenantId),
       entryPoint: config.entryPoint,
       issuer: config.issuer,
       cert: config.cert,
