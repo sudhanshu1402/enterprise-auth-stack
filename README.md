@@ -46,6 +46,9 @@ graph TB
 | **AWS Secrets Manager** | Tenant SAML certificates and endpoints stored encrypted with automatic rotation support. IAM roles on ECS/EKS provide implicit credentials. |
 | **jsonwebtoken** | Lightweight JWT issuance with configurable issuer, audience, and expiry. Internal services validate against shared secret or public key. |
 | **Express 5** | Minimal HTTP layer. `urlencoded` middleware required for SAML POST binding assertion consumption. |
+| **Vitest** | Unit suites for the SAML strategy factory, JWT claims, SCIM store/PATCH parsing, Secrets Manager resolution, and the OpenAPI spec. |
+
+Runs on Node 20 or 22 (CI covers both; `.nvmrc` and the Docker images pin 22).
 
 ## Key Features
 
@@ -99,11 +102,23 @@ curl -X POST http://localhost:3000/scim/v2/Users \
   -d '{"userName": "jane@corp.com", "name": {"givenName": "Jane"}, "active": true}'
 ```
 
-**Production deployment:**
+## Tests
+
+```bash
+npm test        # vitest run
+```
+
+Six suites cover the parts worth pinning: `mapGroupsToRole` and `createTenantStrategy` (SAML), `issueInternalToken` claims (JWT), the SCIM store CRUD + `extractActiveFromPatch` deprovision parsing, `getTenantConfig` (Secrets Manager mocked, prod-vs-dev fallback behaviour), and the OpenAPI document matching the routes actually served. No network or AWS credentials required — the AWS SDK is mocked.
+
+## Production deployment
+
 ```bash
 docker build -t auth-stack .
-docker run -e AWS_REGION=us-east-1 -e JWT_SECRET=... auth-stack
+docker run -e AWS_REGION=us-east-1 -e NODE_ENV=production \
+  -e SCIM_BEARER_TOKEN=... -e JWT_SECRET_DEV_ONLY=... auth-stack
 ```
+
+The repo also ships a `render.yaml` for one-click deploy to Render. Note that under `NODE_ENV=production` the dev fallbacks fail closed: the mock IdP config is disabled (missing tenant secrets return 500) and SCIM refuses to start without `SCIM_BEARER_TOKEN`.
 
 ## Future Improvements
 
