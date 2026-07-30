@@ -1,16 +1,16 @@
-# Enterprise Auth Stack
+# enterprise-auth-stack
 
 [![CI](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A B2B SSO gateway that synthesizes SAML 2.0 Identity Provider assertions into unified JWTs, with SCIM 2.0 user provisioning and multi-tenant isolation backed by AWS Secrets Manager.
+A B2B SSO gateway. It turns each customer's SAML 2.0 assertions into one uniform internal JWT, handles SCIM 2.0 user provisioning, and keeps tenants isolated with configs pulled from AWS Secrets Manager at runtime.
 
-> **Scope:** a single-process reference implementation of the enterprise-SSO *wiring* — per-request SAML strategy construction, JIT group→role mapping, tenant config resolved from Secrets Manager (with a dev-only mock fallback that is disabled under `NODE_ENV=production`), and a SCIM router over an in-memory user store. It is a focused demo of the pattern, not a hosted product: swap the in-memory store for a database and point Secrets Manager at real tenant secrets to run it for real.
+Single-process reference implementation of the wiring, not a hosted product. The user store is in-memory. Swap it for a database and point Secrets Manager at real tenant secrets to run it for real.
 
-## Problem
+## The problem
 
-Enterprise customers require SSO. Each customer uses a different Identity Provider (Okta, Azure AD, OneLogin) with different SAML configurations, certificates, and attribute mappings. Hardcoding IdP configs per tenant doesn't scale. Storing certificates in application code or databases creates security and rotation nightmares.
+Every enterprise customer brings a different IdP: Okta, Azure AD, OneLogin, each with its own certificates and attribute names. Hardcoding a config per tenant doesn't scale, and putting certificates in your codebase or database creates a rotation problem you'll regret.
 
-This stack dynamically resolves tenant-specific SAML configurations from AWS Secrets Manager at runtime, performs JIT role mapping from IdP group assertions, and issues a uniform internal JWT -- decoupling upstream identity complexity from downstream microservices.
+So tenant SAML config is resolved from Secrets Manager per request, IdP groups map to internal roles at assertion time, and downstream services get one JWT shape and never learn what SAML is.
 
 ## Architecture
 
@@ -33,84 +33,46 @@ graph TB
     style JWT fill:#059669,color:#fff
 ```
 
-**Key architectural decisions:**
-- **Dynamic strategy factory**: SAML strategies are constructed per-request using tenant-specific configs from Secrets Manager. No strategy caching -- ensures config rotation takes effect immediately.
-- **JIT role mapping**: IdP group attributes (e.g., Okta's `groups: ["Admin"]`) are mapped to internal roles at assertion time, eliminating manual user provisioning.
-- **Token abstraction**: Upstream IdP complexity (SAML vs OIDC) is hidden behind a uniform JWT interface. Downstream services never touch SAML.
+Login hits `/api/auth/saml/:tenantId/login`, the tenant's config comes out of Secrets Manager, Passport builds the AuthnRequest, the IdP POSTs a signed assertion back to the callback, the signature is checked against the stored cert, groups become roles (`Admin` to `admin`, everything else `member`), and a 1h JWT is issued scoped to tenant and role.
 
-## Tech Stack
+## Three decisions worth reading
 
-| Technology | Why |
-|---|---|
-| **Passport.js + passport-saml** | De facto Node.js auth middleware. SAML strategy supports dynamic configuration per authentication attempt. |
-| **AWS Secrets Manager** | Tenant SAML certificates and endpoints stored encrypted with automatic rotation support. IAM roles on ECS/EKS provide implicit credentials. |
-| **jsonwebtoken** | Lightweight JWT issuance with configurable issuer, audience, and expiry. Internal services validate against shared secret or public key. |
-| **Express 5** | Minimal HTTP layer. `urlencoded` middleware required for SAML POST binding assertion consumption. |
-| **Vitest** | Unit suites for the SAML strategy factory, JWT claims, SCIM store/PATCH parsing, Secrets Manager resolution, and the OpenAPI spec. |
+**Strategies are built per request, never cached.** A cached SAML strategy means a rotated certificate keeps failing until something evicts it. Rebuilding per request costs a Secrets Manager call and makes rotation take effect immediately. That's the right trade until the call volume actually hurts.
 
-Runs on Node 20 or 22 (CI covers both; `.nvmrc` and the Docker images pin 22).
+**JIT role mapping.** Group attributes from the assertion map to internal roles at login, so nobody provisions users by hand before their first sign-in.
 
-## Key Features
+**Dev fallbacks fail closed.** There's a mock IdP config for local work, and under `NODE_ENV=production` it's disabled: a missing tenant secret returns 500 instead of silently authenticating against a fake. SCIM refuses to start without `SCIM_BEARER_TOKEN` rather than defaulting to one.
 
-- **Multi-tenant SAML SSO** -- dynamic per-tenant IdP configuration resolved at runtime from Secrets Manager
-- **JIT group-to-role mapping** -- IdP group assertions automatically mapped to internal RBAC roles
-- **SCIM 2.0 provisioning** -- bearer-secured create / read / list / PATCH (activate-deactivate) / delete against an in-memory user store, with unique-`userName` conflict (`scimType: uniqueness`, 409) handling. The bearer check fails closed in production (no built-in default token).
-- **Token normalization** -- SAML assertions converted to uniform JWTs with `sub`, `email`, `tenantId`, `role` claims
-- **Swagger documentation** -- OpenAPI 3.0 spec at `/api-docs`
-- **Security defaults** -- non-root Docker user, audience validation, bearer token auth on SCIM endpoints
+## SCIM
 
-## Auth Flow
-
-1. Client hits `GET /api/auth/saml/:tenantId/login`
-2. Server pulls tenant's SAML config (entryPoint, issuer, cert) from AWS Secrets Manager
-3. Passport constructs SAML AuthnRequest and redirects user to their enterprise IdP
-4. IdP POSTs signed SAML assertion to `POST /api/auth/saml/:tenantId/callback`
-5. Passport validates assertion signature against stored certificate
-6. IdP groups mapped to internal roles (`Admin` -> `admin`, default -> `member`)
-7. Internal JWT issued with 1h expiry, scoped to tenant and role
-8. Downstream services validate JWT without any SAML awareness
-
-## Scale Considerations
-
-| Dimension | Current | Production Path |
-|---|---|---|
-| **Tenant count** | Unlimited (dynamic strategy creation) | Add Redis cache for Secrets Manager responses with 5min TTL to reduce API calls |
-| **Session management** | Stateless (JWT) | No server-side session storage needed; horizontal scaling is free |
-| **Certificate rotation** | Immediate (no caching) | Add cache-aside pattern with invalidation webhook from Secrets Manager rotation |
-| **SCIM throughput** | Synchronous | Add queue-backed SCIM processing for bulk directory syncs (1000+ users) |
-
-## Failure Handling
-
-1. **Secrets Manager unavailable** -- falls back to mock config in dev; returns 500 in production
-2. **Invalid SAML assertion** -- returns 401 with "SAML Assertion Failed"
-3. **Unknown tenant** -- Secrets Manager returns not-found; surfaced as 500
-4. **SCIM unauthorized** -- bearer token mismatch returns 401 before any provisioning logic
-
-## Setup
+Bearer-secured create, read, list, PATCH (activate and deactivate), and delete against the in-memory store. Duplicate `userName` returns a proper 409 with `scimType: uniqueness`.
 
 ```bash
-npm install
-cp .env.example .env  # Configure AWS_REGION, JWT keys, SCIM token
-npm run dev
-```
-
-```bash
-# Test SCIM provisioning
 curl -X POST http://localhost:3000/scim/v2/Users \
-  -H "Authorization: Bearer test_scim_token_here" \
+  -H "Authorization: Bearer $SCIM_BEARER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"userName": "jane@corp.com", "name": {"givenName": "Jane"}, "active": true}'
 ```
 
+## Run it
+
+```bash
+npm install
+cp .env.example .env      # AWS_REGION, JWT keys, SCIM token
+npm run dev
+```
+
+OpenAPI spec is served at `/api-docs`. Node 20 or 22.
+
 ## Tests
 
 ```bash
-npm test        # vitest run
+npm test
 ```
 
-Six suites cover the parts worth pinning: `mapGroupsToRole` and `createTenantStrategy` (SAML), `issueInternalToken` claims (JWT), the SCIM store CRUD + `extractActiveFromPatch` deprovision parsing, `getTenantConfig` (Secrets Manager mocked, prod-vs-dev fallback behaviour), and the OpenAPI document matching the routes actually served. No network or AWS credentials required — the AWS SDK is mocked.
+Six suites, no network and no AWS credentials (the SDK is mocked): `mapGroupsToRole` and `createTenantStrategy`, JWT claim shape, the SCIM store plus `extractActiveFromPatch` deprovision parsing, `getTenantConfig` across prod and dev fallback behaviour, and a check that the OpenAPI document matches the routes actually served.
 
-## Production deployment
+## Deploy
 
 ```bash
 docker build -t auth-stack .
@@ -118,22 +80,21 @@ docker run -e AWS_REGION=us-east-1 -e NODE_ENV=production \
   -e SCIM_BEARER_TOKEN=... -e JWT_SECRET_DEV_ONLY=... auth-stack
 ```
 
-The repo also ships a `render.yaml` for one-click deploy to Render. Note that under `NODE_ENV=production` the dev fallbacks fail closed: the mock IdP config is disabled (missing tenant secrets return 500) and SCIM refuses to start without `SCIM_BEARER_TOKEN`.
+Non-root user in the image. `render.yaml` included.
 
-## Future Improvements
+## What it doesn't do
 
-- [ ] Migrate `passport-saml` → `@node-saml/passport-saml` (the original package is deprecated and no longer maintained)
-- [ ] OIDC provider support alongside SAML for modern IdPs
-- [ ] Redis cache for Secrets Manager with rotation-triggered invalidation
-- [ ] JWT signing with RS256 asymmetric keys (public key distribution to services)
-- [ ] SCIM bulk operations endpoint for large directory syncs
-- [ ] Audit logging for all authentication events (compliance trail)
+- `passport-saml` is deprecated. The move to `@node-saml/passport-saml` hasn't happened yet.
+- SAML only. No OIDC, which is what most modern IdPs would rather speak.
+- JWTs are signed HS256 with a shared secret. RS256 with public key distribution is the real answer.
+- No Secrets Manager caching, so every login is an API call.
+- No audit log of authentication events, which any compliance review will ask for first.
+- SCIM is synchronous, so a 1000-user directory sync will feel it.
 
-## Deep-Dive Architecture
+## Deep-dive
 
-For a complete system design breakdown with Mermaid diagrams, visit the [System Design Portal](https://sudhanshu1402.github.io/system-design-portal/auth-stack).
+Full breakdown at the [System Design Portal](https://sudhanshu1402.github.io/system-design-portal/auth-stack).
 
 ## License
 
 MIT
-
