@@ -1,4 +1,10 @@
-# enterprise-auth-stack
+<h1>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/banner-dark.svg" />
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/banner-light.svg" />
+  <img src="https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/banner-dark.svg" width="100%" alt="enterprise-auth-stack: SAML 2.0 and SCIM 2.0 for B2B tenants. reference implementation, in-memory user store. The failure it exists for: a cached SAML strategy outlives a rotated certificate. resolve per request." />
+</picture>
+</h1>
 
 [![CI](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
