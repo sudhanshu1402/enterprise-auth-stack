@@ -105,4 +105,29 @@ describe('issueInternalToken', () => {
     // Sanity check: the correct audience still verifies.
     expect(() => jwt.verify(token, TEST_SECRET, { audience: 'internal-api-gateway' })).not.toThrow();
   });
+
+  // The dev key is committed in src/auth/jwt.ts, so anyone reading the repo could
+  // forge a token if production ever fell back to it.
+  it('refuses to sign with the committed dev key under NODE_ENV=production', () => {
+    const previousSecret = process.env.JWT_SECRET_DEV_ONLY;
+    const previousEnv = process.env.NODE_ENV;
+    delete process.env.JWT_SECRET_DEV_ONLY;
+    process.env.NODE_ENV = 'production';
+    try {
+      expect(() => issueInternalToken(baseUser)).toThrow(/not configured/);
+    } finally {
+      process.env.NODE_ENV = previousEnv;
+      if (previousSecret !== undefined) process.env.JWT_SECRET_DEV_ONLY = previousSecret;
+    }
+  });
+
+  it('still signs with the dev key outside production', () => {
+    const previousSecret = process.env.JWT_SECRET_DEV_ONLY;
+    delete process.env.JWT_SECRET_DEV_ONLY;
+    try {
+      expect(() => issueInternalToken(baseUser)).not.toThrow();
+    } finally {
+      if (previousSecret !== undefined) process.env.JWT_SECRET_DEV_ONLY = previousSecret;
+    }
+  });
 });

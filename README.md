@@ -47,7 +47,7 @@ Login hits `/api/auth/saml/:tenantId/login`, the tenant's config comes out of Se
 
 **JIT role mapping.** Group attributes from the assertion map to internal roles at login, so nobody provisions users by hand before their first sign-in.
 
-**Dev fallbacks fail closed.** There's a mock IdP config for local work, and under `NODE_ENV=production` it's disabled: a missing tenant secret returns 500 instead of silently authenticating against a fake. SCIM refuses to start without `SCIM_BEARER_TOKEN` rather than defaulting to one.
+**Dev fallbacks fail closed.** There's a mock IdP config for local work, and under `NODE_ENV=production` it's disabled: a missing tenant secret returns 500 instead of silently authenticating against a fake. SCIM refuses to start without `SCIM_BEARER_TOKEN` rather than defaulting to one, and token issuance throws without `JWT_SECRET_DEV_ONLY` rather than signing with the dev key that is visible in `src/auth/jwt.ts`.
 
 ## SCIM
 

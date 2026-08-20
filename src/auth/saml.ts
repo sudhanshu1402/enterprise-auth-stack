@@ -62,6 +62,11 @@ export const createTenantStrategy = async (tenantId: string) => {
       cert: config.cert,
       // For enterprise deployments, exact audience matching is strictly required
       audience: process.env.ISSUER_URI || 'https://auth.enterpriseweb.com',
+      // Both default to false in passport-saml 3.x. Without them a captured
+      // assertion can be replayed, and an unsigned assertion inside a signed
+      // response is accepted.
+      validateInResponseTo: true,
+      wantAssertionsSigned: true,
     },
     (profile: Profile | null | undefined, done: (err: Error | null, user?: any) => void) => {
       if (!profile) {

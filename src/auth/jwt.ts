@@ -1,7 +1,20 @@
 import jwt from 'jsonwebtoken';
 
-// In production, this would also rely on AWS Secrets Manager / KMS to fetch the private signing key
-const JWT_SECRET = process.env.JWT_SECRET_DEV_ONLY || 'super-secret-enterprise-key-do-not-use';
+// In production, this would also rely on AWS Secrets Manager / KMS to fetch the private signing key.
+//
+// Fails closed in production: if JWT_SECRET_DEV_ONLY is unset we refuse to sign
+// with the built-in dev key (which is visible in source), rather than issuing a
+// token anyone reading the repo could forge.
+const signingSecret = (): string => {
+  const configured = process.env.JWT_SECRET_DEV_ONLY;
+  if (!configured) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT signing secret is not configured');
+    }
+    return 'super-secret-enterprise-key-do-not-use';
+  }
+  return configured;
+};
 
 export interface InternalJwtPayload {
   sub: string;
@@ -28,5 +41,5 @@ export const issueInternalToken = (user: Express.User): string => {
   const signOptions: jwt.SignOptions = { expiresIn: '1h', audience: 'internal-api-gateway' };
   if (process.env.ISSUER_URI) signOptions.issuer = process.env.ISSUER_URI;
 
-  return jwt.sign(payload, JWT_SECRET, signOptions);
+  return jwt.sign(payload, signingSecret(), signOptions);
 };
