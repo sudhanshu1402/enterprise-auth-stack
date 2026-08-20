@@ -43,7 +43,7 @@ Login hits `/api/auth/saml/:tenantId/login`, the tenant's config comes out of Se
 
 ## Three decisions worth reading
 
-**Strategies are built per request, never cached.** A cached SAML strategy means a rotated certificate keeps failing until something evicts it. Rebuilding per request costs a Secrets Manager call and makes rotation take effect immediately. That's the right trade until the call volume actually hurts.
+**One strategy, IdP config resolved per request.** A cached per-tenant certificate means a rotated one keeps failing until something evicts it, so `getSamlOptions` re-reads Secrets Manager on every request and rotation takes effect immediately. That costs two API calls per login, one on the redirect and one on the callback, which is the right trade until the volume hurts. The strategy itself is registered once (`MultiSamlStrategy`), because the InResponseTo replay cache has to outlive the redirect to the IdP: building a new strategy per request gave the callback an empty cache and `validateInResponseTo: always` would reject every assertion.
 
 **JIT role mapping.** Group attributes from the assertion map to internal roles at login, so nobody provisions users by hand before their first sign-in.
 
@@ -76,7 +76,7 @@ OpenAPI spec is served at `/api-docs`. Node 20 or 22.
 npm test
 ```
 
-Six suites, no network and no AWS credentials (the SDK is mocked): `mapGroupsToRole` and `createTenantStrategy`, JWT claim shape, the SCIM store plus `extractActiveFromPatch` deprovision parsing, `getTenantConfig` across prod and dev fallback behaviour, and a check that the OpenAPI document matches the routes actually served.
+Six suites, no network and no AWS credentials (the SDK is mocked): `mapGroupsToRole`, the `asTenantId` route guard, `getSamlOptions` per-tenant resolution and the shared replay cache, JWT claim shape, the SCIM store plus `extractActiveFromPatch` deprovision parsing, `getTenantConfig` across prod and dev fallback behaviour, and a check that the OpenAPI document matches the routes actually served.
 
 ## Deploy
 
@@ -90,10 +90,10 @@ Non-root user in the image. `render.yaml` included.
 
 ## What it doesn't do
 
-- `passport-saml` is deprecated. The move to `@node-saml/passport-saml` hasn't happened yet.
+- The InResponseTo replay cache is an in-process Map, so it only holds on a single instance. More than one replica needs a Redis-backed `CacheProvider`.
 - SAML only. No OIDC, which is what most modern IdPs would rather speak.
 - JWTs are signed HS256 with a shared secret. RS256 with public key distribution is the real answer.
-- No Secrets Manager caching, so every login is an API call.
+- No Secrets Manager caching, so every login is two API calls.
 - No audit log of authentication events, which any compliance review will ask for first.
 - SCIM is synchronous, so a 1000-user directory sync will feel it.
 

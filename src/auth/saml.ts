@@ -1,4 +1,12 @@
-import { Strategy as SamlStrategy, Profile } from 'passport-saml';
+import {
+  CacheItem,
+  CacheProvider,
+  MultiSamlStrategy,
+  PassportSamlConfig,
+  Profile,
+  ValidateInResponseTo,
+  VerifiedCallback,
+} from '@node-saml/passport-saml';
 import passport from 'passport';
 import { getTenantConfig } from '../secrets';
 
@@ -47,44 +55,146 @@ export const samlCallbackUrl = (
 ): string =>
   `${baseUrl.replace(/\/+$/, '')}/api/auth/saml/${tenantId}/callback`;
 
-/**
- * Factory for creating tenant-specific SAML strategies dynamically.
- * Enterprise B2B requires isolated IdP configurations per client.
- */
-export const createTenantStrategy = async (tenantId: string) => {
-  const config = await getTenantConfig(tenantId);
+// Only the route params are read, so no express Request declaration is pinned.
+type RouteParams = { params: Record<string, string | string[] | undefined> };
 
-  return new SamlStrategy(
-    {
-      callbackUrl: samlCallbackUrl(tenantId),
-      entryPoint: config.entryPoint,
-      issuer: config.issuer,
-      cert: config.cert,
-      // For enterprise deployments, exact audience matching is strictly required
-      audience: process.env.ISSUER_URI || 'https://auth.enterpriseweb.com',
-      // Both default to false in passport-saml 3.x. Without them a captured
-      // assertion can be replayed, and an unsigned assertion inside a signed
-      // response is accepted.
-      validateInResponseTo: true,
-      wantAssertionsSigned: true,
-    },
-    (profile: Profile | null | undefined, done: (err: Error | null, user?: any) => void) => {
-      if (!profile) {
-        return done(new Error('SAML profile was empty'));
-      }
-      
-      // Perform Just-In-Time (JIT) Group Mapping here.
-      // E.g. map Okta's 'groups' attribute to internal roles.
-      const mappedRole = mapGroupsToRole(profile);
+// The tenant id becomes part of a Secrets Manager secret name, so traversal or a
+// repeated :tenantId (an array under express 5) must not reach the lookup.
+export const asTenantId = (value: unknown): string | null =>
+  typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/i.test(value)
+    ? value
+    : null;
 
-      const user: Express.User = {
-        ...profile,
-        tenantId,
-        customRole: mappedRole
-      };
-
-      console.log(`[SAML] Successful assertion for ${profile.nameID || profile.email}`);
-      return done(null, user);
+// ponytail: single process only, so replay protection breaks across replicas and a
+// restart fails in-flight logins closed. Upgrade is a Redis SETEX CacheProvider.
+export const createRequestCache = (
+  ttlMs: number = 10 * 60 * 1000
+): CacheProvider & { size: () => number } => {
+  const items = new Map<string, CacheItem>();
+  let lastPrune = 0;
+  // An abandoned login is never looked up again, so lazy expiry alone leaks it.
+  const prune = (now: number) => {
+    if (now <= lastPrune + ttlMs) return;
+    for (const [key, item] of items) {
+      if (now - item.createdAt >= ttlMs) items.delete(key);
     }
-  );
+    lastPrune = now;
+  };
+  const fresh = (key: string): CacheItem | null => {
+    const item = items.get(key);
+    if (!item) return null;
+    if (Date.now() - item.createdAt >= ttlMs) {
+      items.delete(key);
+      return null;
+    }
+    return item;
+  };
+  return {
+    async saveAsync(key: string, value: string) {
+      const now = Date.now();
+      prune(now);
+      if (fresh(key)) return null;
+      const item: CacheItem = { value, createdAt: now };
+      items.set(key, item);
+      return item;
+    },
+    async getAsync(key: string) {
+      prune(Date.now());
+      return fresh(key)?.value ?? null;
+    },
+    async removeAsync(key: string | null) {
+      if (key === null) return null;
+      return items.delete(key) ? key : null;
+    },
+    size: () => items.size,
+  };
 };
+
+// Our own SAML entity ID: what the AuthnRequest is issued as, and the audience the
+// assertion must be addressed to. Not the IdP's entity ID, which is config.issuer.
+export const spEntityId = (): string =>
+  process.env.ISSUER_URI || 'https://auth.enterpriseweb.com';
+
+// Per-request IdP resolution, so a rotated certificate takes effect immediately.
+export const getSamlOptions = (
+  req: RouteParams,
+  done: (err: Error | null, samlOptions?: Partial<PassportSamlConfig>) => void
+): void => {
+  const tenantId = asTenantId(req.params.tenantId);
+  if (!tenantId) {
+    done(new Error('SAML route is missing a valid tenantId'));
+    return;
+  }
+  getTenantConfig(tenantId)
+    .then((config) =>
+      done(null, {
+        callbackUrl: samlCallbackUrl(tenantId),
+        entryPoint: config.entryPoint,
+        issuer: spEntityId(),
+        // Rejects an assertion issued by anyone other than this tenant's IdP.
+        idpIssuer: config.issuer,
+        idpCert: config.cert,
+      })
+    )
+    .catch((error: unknown) => done(error as Error));
+};
+
+// The tenant comes from the validated route param, spread last so no IdP attribute
+// can override it.
+export const verifySignon = (
+  req: RouteParams,
+  profile: Profile | null,
+  done: VerifiedCallback
+): void => {
+  if (!profile) {
+    return done(new Error('SAML profile was empty'));
+  }
+  const tenantId = asTenantId(req.params.tenantId);
+  if (!tenantId) {
+    return done(new Error('SAML assertion arrived without a valid tenantId'));
+  }
+
+  // Perform Just-In-Time (JIT) Group Mapping here.
+  // E.g. map Okta's 'groups' attribute to internal roles.
+  const user: Express.User = {
+    ...profile,
+    tenantId,
+    customRole: mapGroupsToRole(profile),
+  };
+
+  console.log(`[SAML] Successful assertion for ${profile.nameID || profile.email}`);
+  return done(null, user);
+};
+
+// Single Logout verify. v5 requires it; the profile is handed back for the caller's
+// session teardown rather than trusted to name a session on its own.
+export const verifyLogout = (
+  _req: RouteParams,
+  profile: Profile | null,
+  done: VerifiedCallback
+): void => {
+  if (!profile) {
+    return done(new Error('SAML logout profile was empty'));
+  }
+  return done(null, { ...profile });
+};
+
+// One strategy for every tenant; getSamlOptions resolves the IdP per request.
+export const samlStrategy = (
+  cacheProvider: CacheProvider = createRequestCache()
+): MultiSamlStrategy =>
+  new MultiSamlStrategy(
+    {
+      name: 'saml',
+      passReqToCallback: true,
+      getSamlOptions,
+      // Enterprise deployments need exact audience matching.
+      audience: spEntityId(),
+      // Rejects a replayed assertion, and an unsigned assertion inside a signed response.
+      validateInResponseTo: ValidateInResponseTo.always,
+      wantAssertionsSigned: true,
+      cacheProvider,
+    },
+    verifySignon,
+    verifyLogout
+  );
