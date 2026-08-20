@@ -68,7 +68,7 @@ cp .env.example .env      # AWS_REGION, JWT keys, SCIM token
 npm run dev
 ```
 
-OpenAPI spec is served at `/api-docs`. Node 20 or 22.
+OpenAPI spec is served at `/api-docs`. Node 20.19 or newer.
 
 ## Tests
 

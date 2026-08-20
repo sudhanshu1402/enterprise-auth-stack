@@ -2,15 +2,25 @@
   "name": "enterprise-auth-stack",
   "version": "1.0.0",
   "description": "Multi-tenant B2B SSO gateway demo: per-tenant SAML 2.0 assertions resolved from AWS Secrets Manager, JIT group-to-role mapping, uniform internal JWTs, and an in-memory SCIM 2.0 provisioning router.",
-  "main": "index.js",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "start": "node dist/index.js",
     "dev": "nodemon -w src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
     "test": "vitest run"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "saml",
+    "scim",
+    "sso",
+    "multi-tenant",
+    "authentication",
+    "security",
+    "typescript"
+  ],
+  "author": "Sudhanshu Singh",
   "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1097.0",
