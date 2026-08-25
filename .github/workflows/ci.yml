@@ -24,3 +24,5 @@ jobs:
     - run: npm ci
     - run: npm run build
     - run: npm test
+    - name: README diagrams are current
+      run: npm run assets && git add -A -N assets/ && git diff --exit-code assets/

@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "dev": "nodemon -w src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "assets": "node scripts/make-readme-svg.mjs"
   },
   "keywords": [
     "saml",
