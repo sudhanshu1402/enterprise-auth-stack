@@ -8,15 +8,11 @@
 
 [![CI](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A B2B SSO gateway. It turns each customer's SAML 2.0 assertions into one uniform internal JWT, handles SCIM 2.0 user provisioning, and keeps tenants isolated with configs pulled from AWS Secrets Manager at runtime.
+![glance: SAML in, SCIM provisioning, stale cert resolved per login, 59 tests across 6 suites, no network calls](https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/glance.svg)
 
-Single-process reference implementation of the wiring, not a hosted product. The user store is in-memory. Swap it for a database and point Secrets Manager at real tenant secrets to run it for real.
+SAML assertions become one internal JWT, SCIM provisions users, and each tenant's IdP config comes from Secrets Manager per request so a rotated cert never sits behind a stale cache.
 
-## The problem
-
-Every enterprise customer brings a different IdP: Okta, Azure AD, OneLogin, each with its own certificates and attribute names. Hardcoding a config per tenant doesn't scale, and putting certificates in your codebase or database creates a rotation problem you'll regret.
-
-So tenant SAML config is resolved from Secrets Manager per request, IdP groups map to internal roles at assertion time, and downstream services get one JWT shape and never learn what SAML is.
+Single-process reference implementation, not a hosted product. The store is in-memory; swap it for a database to run this for real.
 
 ## Architecture
 
@@ -39,19 +35,27 @@ graph TB
     style JWT fill:#059669,color:#fff
 ```
 
-Login hits `/api/auth/saml/:tenantId/login`, the tenant's config comes out of Secrets Manager, Passport builds the AuthnRequest, the IdP POSTs a signed assertion back to the callback, the signature is checked against the stored cert, groups become roles (`Admin` to `admin`, everything else `member`), and a 1h JWT is issued scoped to tenant and role.
+`/api/auth/saml/:tenantId/login`: fetch config, build the AuthnRequest, verify the signed assertion, map groups to roles (`Admin` -> `admin`, else `member`), issue a 1h JWT.
 
-## Three decisions worth reading
+## Proof it runs
 
-**One strategy, IdP config resolved per request.** A cached per-tenant certificate means a rotated one keeps failing until something evicts it, so `getSamlOptions` re-reads Secrets Manager on every request and rotation takes effect immediately. That costs two API calls per login, one on the redirect and one on the callback, which is the right trade until the volume hurts. The strategy itself is registered once (`MultiSamlStrategy`), because the InResponseTo replay cache has to outlive the redirect to the IdP: building a new strategy per request gave the callback an empty cache and `validateInResponseTo: always` would reject every assertion.
+![sign, verify, rotate the secret: the old token FAILS verification against the rotated secret, a new token issued under it verifies clean](https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/demo.svg)
 
-**JIT role mapping.** Group attributes from the assertion map to internal roles at login, so nobody provisions users by hand before their first sign-in.
+Calls the real `issueInternalToken` and `mapGroupsToRole` exports directly, no server needed. `npm run assets` regenerates it from `scripts/demo-sign-verify-rotate.ts`.
 
-**Dev fallbacks fail closed.** There's a mock IdP config for local work, and under `NODE_ENV=production` it's disabled: a missing tenant secret returns 500 instead of silently authenticating against a fake. SCIM refuses to start without `SCIM_BEARER_TOKEN` rather than defaulting to one, and token issuance throws without `JWT_SECRET_DEV_ONLY` rather than signing with the dev key that is visible in `src/auth/jwt.ts`.
+## Key decisions
+
+| Decision | Why | Trade-off |
+|---|---|---|
+| IdP config resolved per request | rotated cert works immediately | 2 Secrets Manager calls/login |
+| JIT role mapping from `groups` | no manual provisioning pre-login | role change needs fresh login |
+| Dev fallbacks fail closed in prod | never trust a mock IdP or dev key | `.env` must be set right |
+
+Full reasoning: [docs/DESIGN.md](docs/DESIGN.md).
 
 ## SCIM
 
-Bearer-secured create, read, list, PATCH (activate and deactivate), and delete against the in-memory store. Duplicate `userName` returns a proper 409 with `scimType: uniqueness`.
+Bearer-secured CRUD + PATCH deprovision. Duplicate `userName` -> 409, `scimType: uniqueness`.
 
 ```bash
 curl -X POST http://localhost:3000/scim/v2/Users \
@@ -68,15 +72,15 @@ cp .env.example .env      # AWS_REGION, JWT keys, SCIM token
 npm run dev
 ```
 
-OpenAPI spec is served at `/api-docs`. Node 20.19 or newer.
+OpenAPI spec at `/api-docs`.
 
 ## Tests
 
 ```bash
-npm test
+npm test    # 59 tests, 6 suites, no network, no AWS credentials
 ```
 
-Six suites, no network and no AWS credentials (the SDK is mocked): `mapGroupsToRole`, the `asTenantId` route guard, `getSamlOptions` per-tenant resolution and the shared replay cache, JWT claim shape, the SCIM store plus `extractActiveFromPatch` deprovision parsing, `getTenantConfig` across prod and dev fallback behaviour, and a check that the OpenAPI document matches the routes actually served.
+Covers role mapping, SAML resolution + replay cache, JWT claims, SCIM store + patch parsing, prod/dev fallbacks, OpenAPI-vs-routes parity.
 
 ## Deploy
 
@@ -86,20 +90,21 @@ docker run -e AWS_REGION=us-east-1 -e NODE_ENV=production \
   -e SCIM_BEARER_TOKEN=... -e JWT_SECRET_DEV_ONLY=... auth-stack
 ```
 
-Non-root user in the image. `render.yaml` included.
+Non-root image; `render.yaml` included.
 
 ## What it doesn't do
 
-- The InResponseTo replay cache is an in-process Map, so it only holds on a single instance. More than one replica needs a Redis-backed `CacheProvider`.
-- SAML only. No OIDC, which is what most modern IdPs would rather speak.
-- JWTs are signed HS256 with a shared secret. RS256 with public key distribution is the real answer.
-- No Secrets Manager caching, so every login is two API calls.
-- No audit log of authentication events, which any compliance review will ask for first.
-- SCIM is synchronous, so a 1000-user directory sync will feel it.
+| Gap | Real answer |
+|---|---|
+| Replay cache is an in-process `Map` | needs Redis for >1 replica |
+| SAML only | most modern IdPs speak OIDC |
+| HS256 shared secret | RS256 + public key is the real answer |
+| No audit log | first thing compliance asks for |
+| SCIM is synchronous | a 1000-user sync will feel it |
 
 ## Deep-dive
 
-Full breakdown at the [System Design Portal](https://sudhanshu1402.github.io/system-design-portal/auth-stack).
+[System Design Portal](https://sudhanshu1402.github.io/system-design-portal/auth-stack).
 
 ## License
 
