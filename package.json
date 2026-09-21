@@ -24,7 +24,7 @@
   "author": "Sudhanshu Singh",
   "license": "MIT",
   "dependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.1097.0",
+    "@aws-sdk/client-secrets-manager": "^3.1121.0",
     "@node-saml/passport-saml": "^5.1.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -41,7 +41,7 @@
     "@types/passport": "^1.0.17",
     "@types/swagger-ui-express": "^4.1.8",
     "nodemon": "^3.1.14",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "@types/express": "^5.0.6"
