@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![glance: SAML in, SCIM provisioning, stale cert resolved per login, 59 tests across 6 suites, no network calls](https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/glance.svg)
+![glance: SAML in, SCIM provisioning, stale cert resolved per login, the whole suite verified with no network calls](https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/glance.svg)
 
 SAML assertions become one internal JWT, SCIM provisions users, and each tenant's IdP config comes from Secrets Manager per request so a rotated cert never sits behind a stale cache.
 
@@ -64,6 +64,26 @@ curl -X POST http://localhost:3000/scim/v2/Users \
   -d '{"userName": "jane@corp.com", "name": {"givenName": "Jane"}, "active": true}'
 ```
 
+## Rate limits
+
+Per-IP, on by default. `/api/auth/saml/:tenantId/login` is unauthenticated and resolves the
+tenant IdP from Secrets Manager on every request, so without a cap anyone who can guess a
+tenant slug turns sockets into a bill.
+
+| Routes | Default | Override |
+|---|---|---|
+| SAML login + callback | 600 / 15 min | `SSO_RATE_LIMIT` |
+| `/scim/v2` | 300 / 15 min | `SCIM_RATE_LIMIT` |
+
+Deliberately loose: a B2B tenant egresses through a handful of NAT addresses, so several
+hundred real employees can share one source IP during a morning login rush. Locking out a
+paying customer is the worse failure.
+
+Behind a load balancer, set `TRUST_PROXY` to the number of proxy hops. Left unset Express
+trusts nothing, which is right for a directly reachable process and safe everywhere else,
+but behind a balancer it means every request arrives from one address and the whole
+internet shares a single bucket.
+
 ## Run it
 
 ```bash
@@ -77,7 +97,7 @@ OpenAPI spec at `/api-docs`.
 ## Tests
 
 ```bash
-npm test    # 59 tests, 6 suites, no network, no AWS credentials
+npm test    # no network, no AWS credentials
 ```
 
 Covers role mapping, SAML resolution + replay cache, JWT claims, SCIM store + patch parsing, prod/dev fallbacks, OpenAPI-vs-routes parity.
@@ -97,6 +117,7 @@ Non-root image; `render.yaml` included.
 | Gap | Real answer |
 |---|---|
 | Replay cache is an in-process `Map` | needs Redis for >1 replica |
+| Rate limits count per process | same: a shared store for >1 replica |
 | SAML only | most modern IdPs speak OIDC |
 | HS256 shared secret | RS256 + public key is the real answer |
 | No audit log | first thing compliance asks for |
