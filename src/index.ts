@@ -5,9 +5,21 @@ import { issueInternalToken } from './auth/jwt';
 import { scimRouter } from './routes/scim';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerDocument } from './swagger';
+import { scimLimiter, ssoLimiter } from './rateLimit';
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Behind a load balancer every request arrives from the balancer's address, which
+// would put the whole internet in one rate-limit bucket. TRUST_PROXY is the number
+// of proxy hops to trust (or an Express trust-proxy expression). Left unset, Express
+// trusts nothing, which is the correct default when the process is reachable
+// directly and the safe default everywhere: an attacker cannot forge a lower count.
+const trustProxy = process.env.TRUST_PROXY;
+if (trustProxy) {
+  const hops = Number(trustProxy);
+  app.set('trust proxy', Number.isInteger(hops) ? hops : trustProxy);
+}
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Needed for SAML POST bindings
@@ -22,7 +34,7 @@ passport.use('saml', samlStrategy());
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // --- 1) SCIM PROVISIONING ENDPOINTS ---
-app.use('/scim/v2', scimRouter);
+app.use('/scim/v2', scimLimiter, scimRouter);
 
 // --- SAML Single Sign-On Layer ---
 
@@ -38,13 +50,14 @@ const requireTenantId = (req: Request, res: Response, next: NextFunction) => {
 
 // Dynamic route to initiate IdP SSO. The tenant is read off :tenantId by
 // getSamlOptions, so the same registered strategy serves every tenant.
-app.get('/api/auth/saml/:tenantId/login', requireTenantId, (req, res, next) => {
+app.get('/api/auth/saml/:tenantId/login', ssoLimiter, requireTenantId, (req, res, next) => {
   passport.authenticate('saml', { session: false })(req, res, next);
 });
 
 // Dynamic IdP Assertion Consumer Service (Callback)
 app.post(
   '/api/auth/saml/:tenantId/callback',
+  ssoLimiter,
   requireTenantId,
   (req, res, next) => {
     passport.authenticate('saml', { session: false }, (err: any, user: Express.User) => {
