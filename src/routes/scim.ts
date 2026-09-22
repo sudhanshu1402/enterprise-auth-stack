@@ -17,7 +17,7 @@ const LIST_SCHEMA = 'urn:ietf:params:scim:api:messages:2.0:ListResponse';
 const ERROR_SCHEMA = 'urn:ietf:params:scim:api:messages:2.0:Error';
 
 // SCIM error envelope. `scimType` is required by RFC 7644 for certain errors
-// (e.g. `uniqueness` on a duplicate, `invalidValue` on a bad attribute) — Okta
+// (e.g. `uniqueness` on a duplicate, `invalidValue` on a bad attribute) - Okta
 // and Entra branch on it, so omitting it turns a recoverable 409 into a hard sync failure.
 const scimError = (res: Response, status: number, detail: string, scimType?: string) => {
   const body: Record<string, unknown> = { schemas: [ERROR_SCHEMA], detail, status: String(status) };
@@ -43,7 +43,7 @@ const constantTimeEquals = (a: string, b: string): boolean => {
 };
 
 /**
- * SCIM authentication — a shared bearer token, as IdPs use for outbound
+ * SCIM authentication - a shared bearer token, as IdPs use for outbound
  * provisioning calls. Guards every route on this router.
  *
  * Fails closed in production: if SCIM_BEARER_TOKEN is unset we refuse to fall
@@ -96,7 +96,7 @@ scimRouter.post('/Users', (req: Request, res: Response) => {
   }
 });
 
-/** SCIM 2.0 list — lets the IdP reconcile its directory against ours. */
+/** SCIM 2.0 list - lets the IdP reconcile its directory against ours. */
 scimRouter.get('/Users', (_req: Request, res: Response) => {
   const resources = listUsers().map(toScimResource);
   res.status(200).json({
@@ -146,7 +146,7 @@ export function extractActiveFromPatch(body: unknown): boolean | undefined {
 }
 
 /**
- * SCIM 2.0 PATCH — the deprovision path IdPs actually use. Okta/Entra send
+ * SCIM 2.0 PATCH - the deprovision path IdPs actually use. Okta/Entra send
  * `op: replace {active:false}` to disable a user rather than DELETE, and
  * `active:true` to re-enable. Only the `active` attribute is supported here.
  */

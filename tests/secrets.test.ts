@@ -6,7 +6,7 @@ const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn() }));
 
 vi.mock('@aws-sdk/client-secrets-manager', () => ({
   // Real classes so `new SecretsManagerClient()` / `new GetSecretValueCommand()`
-  // work — an arrow fn can't be used as a constructor.
+  // work - an arrow fn can't be used as a constructor.
   SecretsManagerClient: class {
     send = sendMock;
   },

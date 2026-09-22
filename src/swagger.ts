@@ -78,7 +78,7 @@ export const swaggerDocument = {
       patch: {
         summary: 'Activate / deactivate a User (SCIM)',
         description:
-          "SCIM PatchOp on the `active` attribute — the deprovision path IdPs use (`op: replace {active:false}`). Also accepts a plain `{active}` body.",
+          "SCIM PatchOp on the `active` attribute - the deprovision path IdPs use (`op: replace {active:false}`). Also accepts a plain `{active}` body.",
         security: [{ bearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         responses: {
