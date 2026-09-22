@@ -15,23 +15,23 @@ export interface TenantSamlConfig {
 
 /**
  * Retrieves dynamic SAML configurations for a specific tenant.
- * Uses AWS Secrets Manager to ensure we aren't storing sensitive 
+ * Uses AWS Secrets Manager to ensure we aren't storing sensitive
  * certificates or endpoints in application code or plain databases.
  */
 export async function getTenantConfig(tenantId: string): Promise<TenantSamlConfig> {
   const secretName = `sso/tenant/${tenantId}`;
-  
+
   try {
     const command = new GetSecretValueCommand({ SecretId: secretName });
     const response = await client.send(command);
-    
+
     if (response.SecretString) {
       return JSON.parse(response.SecretString) as TenantSamlConfig;
     }
-    
+
     throw new Error('Secret binary not supported directly without buffer conversion.');
   } catch (error) {
-    // In production a missing or unreadable secret is a hard failure — never
+    // In production a missing or unreadable secret is a hard failure - never
     // silently serve a mock IdP config, which would let anyone authenticate
     // against a fake identity provider.
     if (process.env.NODE_ENV === 'production') {

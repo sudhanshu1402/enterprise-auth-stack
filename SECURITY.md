@@ -2,7 +2,7 @@
 
  ## Scope
 
- This policy covers the `enterprise-auth-stack` source in this repository. It is a reference implementation, not a deployed service and not a published package — but the SAML and SCIM handling here is the kind of code people copy into real systems, so flaws in it are worth reporting.
+ This policy covers the `enterprise-auth-stack` source in this repository. It is a reference implementation, not a deployed service and not a published package - but the SAML and SCIM handling here is the kind of code people copy into real systems, so flaws in it are worth reporting.
 
  ## Supported versions
 
@@ -23,7 +23,7 @@
 
  That opens a private advisory visible only to you and the maintainer.
 
- If private reporting is unavailable to you, open an issue that says only that you have a security report and asks for a private channel — no details, no proof of concept.
+ If private reporting is unavailable to you, open an issue that says only that you have a security report and asks for a private channel - no details, no proof of concept.
 
  ## What to expect
 
@@ -41,4 +41,4 @@
  - Vulnerabilities in dependencies with no exploitable path through this project. Report those upstream; Dependabot already tracks dependency advisories here.
  - Findings that require an attacker to already control the machine, the process, or the Secrets Manager account the tenant config is read from.
  - Automated scanner output with no demonstrated impact.
- 
+
