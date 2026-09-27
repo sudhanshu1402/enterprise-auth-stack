@@ -1,14 +1,10 @@
-<h1>
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/banner-dark.svg" />
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/banner-light.svg" />
-  <img src="https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/banner-dark.svg" width="100%" alt="enterprise-auth-stack: SAML 2.0 and SCIM 2.0 for B2B tenants. reference implementation, in-memory user store. The failure it exists for: a cached SAML strategy outlives a rotated certificate. resolve per request." />
-</picture>
-</h1>
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/hero.svg" width="100%" alt="enterprise-auth-stack as a blueprint: browser to Express and Passport, which reads the tenant&#x27;s IdP config from Secrets Manager on every request, talks to the tenant IdP, and issues a 1 hour internal JWT. When the IdP rotates its cert, the very next login works. Spec: Admin maps to admin, else member; duplicate SCIM user returns 409; rate limits 600 and 300 per 15 minutes." />
 
 [![CI](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/sudhanshu1402/enterprise-auth-stack/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![glance: SAML in, SCIM provisioning, stale cert resolved per login, the whole suite verified with no network calls](https://raw.githubusercontent.com/sudhanshu1402/enterprise-auth-stack/main/assets/glance.svg)
+</div>
 
 SAML assertions become one internal JWT, SCIM provisions users, and each tenant's IdP config comes from Secrets Manager per request so a rotated cert never sits behind a stale cache.
 
@@ -126,6 +122,10 @@ Non-root image; `render.yaml` included.
 ## Deep-dive
 
 [System Design Portal](https://sudhanshu1402.github.io/system-design-portal/auth-stack).
+
+---
+
+<sub>Part of [sudhanshu1402](https://github.com/sudhanshu1402)'s work: [keel](https://github.com/sudhanshu1402/keel) · [nocap](https://github.com/sudhanshu1402/nocap) · [receipts](https://github.com/sudhanshu1402/receipts) · **enterprise-auth-stack** · [distributed-queue-engine](https://github.com/sudhanshu1402/distributed-queue-engine) · [multi-region-mongo-patterns](https://github.com/sudhanshu1402/multi-region-mongo-patterns) · [otel-sdk-node](https://github.com/sudhanshu1402/otel-sdk-node) · [llm-assessment-pipeline](https://github.com/sudhanshu1402/llm-assessment-pipeline). Write-ups on the [System Design Portal](https://sudhanshu1402.github.io/system-design-portal/).</sub>
 
 ## License
 
