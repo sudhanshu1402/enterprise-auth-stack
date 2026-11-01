@@ -24,11 +24,11 @@
   "author": "Sudhanshu Singh",
   "license": "MIT",
   "dependencies": {
-    "@aws-sdk/client-secrets-manager": "^3.1121.0",
-    "@node-saml/passport-saml": "^5.1.0",
+    "@aws-sdk/client-secrets-manager": "^3.1159.0",
+    "@node-saml/passport-saml": "^5.1.1",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.7.0",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
     "jsonwebtoken": "^9.0.3",
     "passport": "^0.7.0",
     "swagger-ui-express": "^5.0.1",
@@ -38,11 +38,11 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^25.9.5",
+    "@types/node": "^25.9.9",
     "@types/passport": "^1.0.17",
     "@types/swagger-ui-express": "^4.1.8",
     "nodemon": "^3.1.14",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "@types/express": "^5.0.6"
